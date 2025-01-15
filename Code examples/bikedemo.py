@@ -17,19 +17,19 @@ from palimpzest.utils.udfs import xls_to_tables
 
 
 
+CLOSE_ADDRS = [
+    "Cambridge",
+    "Belmont",
+    "Medford",
+    "Somerville",
 
+]
 
 FAR_AWAY_ADDRS = [
-    "Melcher St",
-    "Sleeper St",
-    "437 D St",
-    "Seaport Blvd",
-    "50 Liberty Dr",
-    "Telegraph St",
-    "Columbia Rd",
-    "E 6th St",
-    "E 7th St",
-    "E 5th St",
+    "Newburyport",  
+    "East Bridgewater",  
+    "Amesbury", 
+    "Beverly",
 ]
 
 
@@ -52,15 +52,17 @@ def in_price_range(record):
     except Exception:
         return False
     
-def is_good_deal(maximum):
-    return maximum >= TextBikeListing.price
+def is_good_deal(record):
+    return record.price <= 100
 
-def is_far ():
-    address = TextBikeListing.location
-    return address in FAR_AWAY_ADDRS
+def is_close (record):
+    address = record.location
+    return any([street.lower() in address.lower() for street in CLOSE_ADDRS])
 
 
-
+def is_far (record):
+    address = record.location
+    return any([street.lower() in address.lower() for street in FAR_AWAY_ADDRS])
 
 
 
@@ -83,17 +85,17 @@ class BikeListingFiles(pz.Schema):
     )
 
 
-class TextBikeListing(BikeListingFiles):
+class TextBikeListing(BikeListingFiles): #solely rely on the text and NO images
     """Represents a real estate listing with specific fields extracted from its text."""
 
-    address = pz.StringField(desc="The address of the property")
-    price = pz.NumericField(desc="The listed price of the property")
+    # address = pz.StringField(desc="The address of the property")
+    # price = pz.NumericField(desc="The listed price of the property")
 
     price = pz.NumericField(desc="The listed price of the property")
 
-    brand = pz.StringField(desc="The brand of the bike")
-    is_new = pz.BooleanField(desc="True if bicycle is relatively new and fresh and False if otherwiswe") 
-    size = pz.NumericalField (desc="The zie of the bike") #variables that can be determined by images and  text
+    # brand = pz.StringField(desc="The brand of the bike")
+    # is_new = pz.BooleanField(desc="True if bicycle is relatively new and fresh and False if otherwiswe") 
+    # size = pz.NumericalField (desc="The zie of the bike") #variables that can be determined by images and  text
 
 
     seller_name = pz.StringField(desc="The name of the seller")
@@ -104,15 +106,15 @@ class TextBikeListing(BikeListingFiles):
     description_shortened = pz.StringField(desc="The shortened description of the bike")
 
 
-class ImageBikeListing(BikeListingFiles):
+class ImageBikeListing(BikeListingFiles): #uses both the Text and Image to computer answer
     """Represents a real estate listing with specific fields extracted from its text and images."""
 
-    is_modern_and_attractive = pz.BooleanField(
-        desc="True if the home interior design is modern and attractive and False otherwise"
-    )
-    has_natural_sunlight = pz.BooleanField(
-        desc="True if the home interior has lots of natural sunlight and False otherwise"
-    )
+    # is_modern_and_attractive = pz.BooleanField(
+    #     desc="True if the home interior design is modern and attractive and False otherwise"
+    # )
+    # has_natural_sunlight = pz.BooleanField(
+    #     desc="True if the home interior has lots of natural sunlight and False otherwise"
+    # )
 
 
     is_bike = pz.BooleanField(desc="True if the images show a bike and False otherwise")
