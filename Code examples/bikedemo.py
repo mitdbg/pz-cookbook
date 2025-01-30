@@ -14,7 +14,7 @@ import palimpzest as pz
 from palimpzest.utils.udfs import xls_to_tables
 
 
-
+#GO TO LINES 244 ONWARD AND MAKE IT CORRESPOND WITH BIKE LISTINGD
 
 
 CLOSE_ADDRS = [
@@ -24,13 +24,14 @@ CLOSE_ADDRS = [
     "Somerville",
 
 ]
+#unneccessary right now.. unless we add a middle address attribute
 
-FAR_AWAY_ADDRS = [
-    "Newburyport",  
-    "East Bridgewater",  
-    "Amesbury", 
-    "Beverly",
-]
+# FAR_AWAY_ADDRS = [
+#     "Newburyport",  
+#     "East Bridgewater",  
+#     "Amesbury", 
+#     "Beverly",
+# ]
 
 
 def within_two_miles_of_mit(record):
@@ -60,9 +61,9 @@ def is_close (record):
     return any([street.lower() in address.lower() for street in CLOSE_ADDRS])
 
 
-def is_far (record):
-    address = record.location
-    return any([street.lower() in address.lower() for street in FAR_AWAY_ADDRS])
+# def is_far (record): #unneccessary
+#     address = record.location
+#     return any([street.lower() in address.lower() for street in FAR_AWAY_ADDRS])
 
 
 
@@ -241,40 +242,27 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
         print("WARNING: Both OPENAI_API_KEY and TOGETHER_API_KEY are unset")
 
     # create pz plan
-    if workload == "enron":
-        # datasetid="enron-eval" for paper evaluation
-        plan = pz.Dataset(datasetid, schema=Email)
-        plan = plan.filter(
-            "The email is not quoting from a news article or an article written by someone outside of Enron"
-        )
-        plan = plan.filter(
-            'The email refers to a fraudulent scheme (i.e., "Raptor", "Deathstar", "Chewco", and/or "Fat Boy")'
-        )
+    #REPLACE WITH BIKE LISTINGS AT LINES 244 ONWORD
+    data_filepath = f"testdata/{datasetid}"
+    user_dataset_id = f"{datasetid}-user"
+    pz.DataDirectory().register_user_source(
+        src=BikeListingFiles(user_dataset_id, data_filepath),
+        dataset_id=user_dataset_id,
+    )
+    plan = pz.Dataset(user_dataset_id, schema=BikeListingFiles)
+    plan = plan.convert(TextBikeListing, depends_on="text_content")
+    plan = plan.convert(ImageBikeListing, image_conversion=True, depends_on="image_filepaths")
+    # plan = plan.filter(
+    #     "The interior is modern and attractive, and has lots of natural sunlight",
+    #     depends_on=["is_modern_and_attractive", "has_natural_sunlight"],
+    # ) -->do we need
 
-    elif workload == "real-estate":
-        # datasetid="real-estate-eval-100" for paper evaluation
-        data_filepath = f"testdata/{datasetid}"
-        user_dataset_id = f"{datasetid}-user"
-        pz.DataDirectory().register_user_source(
-            src=RealEstateListingSource(user_dataset_id, data_filepath),
-            dataset_id=user_dataset_id,
-        )
-        plan = pz.Dataset(user_dataset_id, schema=RealEstateListingFiles)
-        plan = plan.convert(TextRealEstateListing, depends_on="text_content")
-        plan = plan.convert(ImageRealEstateListing, image_conversion=True, depends_on="image_filepaths")
-        plan = plan.filter(
-            "The interior is modern and attractive, and has lots of natural sunlight",
-            depends_on=["is_modern_and_attractive", "has_natural_sunlight"],
-        )
-        plan = plan.filter(within_two_miles_of_mit, depends_on="address")
-        plan = plan.filter(in_price_range, depends_on="price")
-
-    elif workload == "medical-schema-matching":
-        # datasetid="biofabric-medium" for paper evaluation
-        plan = pz.Dataset(datasetid, schema=pz.XLSFile)
-        plan = plan.convert(pz.Table, udf=xls_to_tables, cardinality=pz.Cardinality.ONE_TO_MANY)
-        plan = plan.filter("The rows of the table contain the patient age")
-        plan = plan.convert(CaseData, desc="The patient data in the table", cardinality=pz.Cardinality.ONE_TO_MANY)
+    plan = plan.filter(
+        "The bike is predominantly black, blue or red (preferably black). The bike should be usable for an adult and should be under 200 dollars and have less than 5 years of usage. Closeby pickup location needed",
+        depends_on=["is_modern_and_attractive", "has_natural_sunlight"],
+    )
+    plan = plan.filter(within_two_miles_of_mit, depends_on="location")
+    plan = plan.filter(in_price_range, depends_on="price")
 
     # execute pz plan
     records, execution_stats = pz.Execute(
@@ -298,42 +286,104 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
         from palimpzest.utils.demo_helpers import print_table
 
         plan_str = list(execution_stats.plan_strs.values())[-1]
-        if workload == "enron":
-            print_table(records, cols=["sender", "subject"], plan_str=plan_str)
+        fst_imgs, snd_imgs, thrd_imgs, locations, prices = [], [], [], [], [] # init list for ratings = []
+        is_news = []
+        sizes = []
+        condition_strings = []
+        condition_ratings = []
+        is_bikes = []
+        brands = []
+        seller_names = []
+        seller_ratings = []
+        descriptions = []
+        shortened_descriptions = []
+        for record in records:
+            locations.append(record.location)
+            prices.append(record.price) # also append record.seller_rating to ratings
+            is_news.append(record.is_new)
+            sizes.append(record.size)
+            condition_strings.append(record.condition)
+            condition_ratings.append(record.condition_rating)
+            is_bikes.append(record.is_bike)
+            brands.append(record.brand)
+            seller_names.append(record.seller_name)
+            seller_ratings.append(record.seller_rating)
+            descriptions.append(record.description)
+            shortened_descriptions.append(record.description_shortened)
 
-        elif workload == "real-estate":
-            fst_imgs, snd_imgs, thrd_imgs, addrs, prices = [], [], [], [], []
-            for record in records:
-                addrs.append(record.address)
-                prices.append(record.price)
-                for idx, img_name in enumerate(["img1.png", "img2.png", "img3.png"]):
-                    path = os.path.join(f"testdata/{datasetid}", record.listing, img_name)
-                    img = Image.open(path)
-                    img_arr = np.asarray(img)
-                    if idx == 0:
-                        fst_imgs.append(img_arr)
-                    elif idx == 1:
-                        snd_imgs.append(img_arr)
-                    elif idx == 2:
-                        thrd_imgs.append(img_arr)
+            for idx, img_name in enumerate(["image1.png", "image2.png", "image3.png"]): # img -> image
+                path = os.path.join(f"testdata/{datasetid}", record.listing, img_name)
+                img = Image.open(path)
+                img_arr = np.asarray(img)
+                if idx == 0:
+                    fst_imgs.append(img_arr)
+                elif idx == 1:
+                    snd_imgs.append(img_arr)
+                elif idx == 2:
+                    thrd_imgs.append(img_arr)
 
-            with gr.Blocks() as demo:
-                fst_img_blocks, snd_img_blocks, thrd_img_blocks, addr_blocks, price_blocks = [], [], [], [], []
-                for fst_img, snd_img, thrd_img, addr, price in zip(fst_imgs, snd_imgs, thrd_imgs, addrs, prices):
-                    with gr.Row(equal_height=True):
-                        with gr.Column():
-                            fst_img_blocks.append(gr.Image(value=fst_img))
-                        with gr.Column():
-                            snd_img_blocks.append(gr.Image(value=snd_img))
-                        with gr.Column():
-                            thrd_img_blocks.append(gr.Image(value=thrd_img))
-                    with gr.Row():
-                        with gr.Column():
-                            addr_blocks.append(gr.Textbox(value=addr, info="Address"))
-                        with gr.Column():
-                            price_blocks.append(gr.Textbox(value=price, info="Price"))
+        with gr.Blocks() as demo:
 
-                plan_str = list(execution_stats.plan_strs.values())[0]
-                gr.Textbox(value=plan_str, info="Query Plan")
+        #     fst_imgs, snd_imgs, thrd_imgs, locations, prices = [], [], [], [], [] # init list for ratings = []
+        # is_news = []
+        # sizes = []
+        # condition_strings = []
+        # condition_ratings = []
+        # is_bikes = []
+        # brands = []
+        # seller_names = []
+        # seller_ratings = []
+        # locations = []
+        # descriptions = []
+        # shortened_descriptions = []
+            fst_img_blocks, snd_img_blocks, thrd_img_blocks, location_blocks, price_blocks = [], [], [], [], [] # add rating_blocks
+            is_new_blocks = []
+            size_blocks = []
+            condition_blocks = []
+            condition_rating_blocks = []
+            is_bike_blocks = []
+            brand_blocks = []
+            seller_name_blocks = []
+            seller_rating_blocks = []
+            description_blocks = []
+            description_shortened_blocks = []
+            for fst_img, snd_img, thrd_img, location, price, is_new, size, condition, condition_rating, is_bike, brand, seller_name, seller_rating, location, description, description_shortened in zip(fst_imgs, snd_imgs, thrd_imgs, locations, prices, is_news, sizes, condition_strings, condition_ratings, is_bikes, brands, seller_names, seller_ratings, locations, descriptions, shortened_descriptions): # iterate over ratings as well
+                with gr.Row(equal_height=True):
+                    with gr.Column():
+                        fst_img_blocks.append(gr.Image(value=fst_img))
+                    with gr.Column():
+                        snd_img_blocks.append(gr.Image(value=snd_img))
+                    with gr.Column():
+                        thrd_img_blocks.append(gr.Image(value=thrd_img))
+                with gr.Row():
+                    with gr.Column():
+                        location_blocks.append(gr.Textbox(value=location, info="Location"))
+                    with gr.Column():
+                        price_blocks.append(gr.Textbox(value=price, info="Price"))
+                    with gr.Column():
+                        is_new_blocks.append(gr.Textbox(value=is_new, info = "Is new"))
+                    with gr.Column():
+                        size_blocks.append(gr.Textbox(value=size, info = "Size"))
+                    with gr.Column():
+                        condition_blocks.append(gr.Textbox(value=condition, info = "Condition"))
+                    with gr.Column():
+                        condition_rating_blocks.append(gr.Textbox(value=condition_rating, info = "Condition Rating"))
+                    with gr.Column():
+                        is_bike_blocks.append(gr.Textbox(value=is_bike, info = "Is bike"))
+                    with gr.Column():
+                        brand_blocks.append(gr.Textbox(value=brand, info = "Brand"))
+                    with gr.Column():
+                        seller_name_blocks.append(gr.Textbox(value=seller_name, info = "Seller name"))
+                    with gr.Column():
+                        description_blocks.append(gr.Textbox(value=description, info = "Description"))
+                    with gr.Column():
+                        description_shortened_blocks.append(gr.Textbox(value=description_shortened, info = "Shortened Description"))
 
-            demo.launch()
+                    
+                        
+                    # Add column for rating_blocks
+
+            plan_str = list(execution_stats.plan_strs.values())[0]
+            gr.Textbox(value=plan_str, info="Query Plan")
+
+        demo.launch()
