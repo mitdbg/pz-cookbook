@@ -10,8 +10,16 @@ import gradio as gr
 import numpy as np
 from PIL import Image
 
-import palimpzest as pz
-from palimpzest.utils.udfs import xls_to_tables
+from palimpzest.core.data.datasources import UserSource
+from palimpzest.core.elements.records import DataRecord
+from palimpzest.core.lib.fields import BooleanField, ListField, ImageFilepathField, NumericField, StringField
+from palimpzest.core.lib.schemas import Schema
+from palimpzest.constants import Model
+from palimpzest.policy import MaxQuality, MinCost, MinTime
+from palimpzest.datamanager.datamanager import DataDirectory
+from palimpzest.sets import Dataset
+from palimpzest.query.processor.config import QueryProcessorConfig
+from palimpzest.utils.demo_helpers import print_table
 
 
 #GO TO LINES 244 ONWARD AND MAKE IT CORRESPOND WITH BIKE LISTINGD
@@ -34,30 +42,34 @@ CLOSE_ADDRS = [
 # ]
 
 
-def within_two_miles_of_mit(record):
-    # NOTE: I'm using this hard-coded function so that folks w/out a
-    #       Geocoding API key from google can still run this example
-    try:
-        return not any([street.lower() in record.address.lower() for street in FAR_AWAY_ADDRS]) #one line code, need clarity for it
-    except Exception:
-        return False
+# def within_two_miles_of_mit(record):
+#     # NOTE: I'm using this hard-coded function so that folks w/out a
+#     #       Geocoding API key from google can still run this example
+#     try:
+#         return not any([street.lower() in record.address.lower() for street in FAR_AWAY_ADDRS]) #one line code, need clarity for it
+#     except Exception:
+#         return False
 
 
-def in_price_range(record):
-    try:
-        price = record.price
-        if isinstance(price, str):
+# def in_price_range(record):
+#     try:
+#         price = record.price
+#         if isinstance(price, str):
+#             price = price.strip()
+#             price = int(price.replace("$", "").replace(",", ""))
+#         return 6e5 < price <= 2e6
+#     except Exception:
+#         return False
+    
+def is_good_deal(record: dict):
+    price = record["price"]
+    if isinstance(price, str):
             price = price.strip()
             price = int(price.replace("$", "").replace(",", ""))
-        return 6e5 < price <= 2e6
-    except Exception:
-        return False
-    
-def is_good_deal(record):
-    return record.price <= 100
+    return price <= 100
 
-def is_close (record):
-    address = record.location
+def is_close(record: dict):
+    address = record["location"]
     return any([street.lower() in address.lower() for street in CLOSE_ADDRS])
 
 
@@ -74,70 +86,72 @@ def is_close (record):
 #Bicycle classes
 
 
-class BikeListingFiles(pz.Schema):
+class BikeListingFiles(Schema):
     """The source text and image data for a real estate listing."""
 
-    listing = pz.StringField(desc="The name of the listing", required=True)
-    text_content = pz.StringField(desc="The content of the listing's text description", required=True)
-    image_filepaths = pz.ListField(
-        element_type=pz.StringField,
+    listing = StringField(desc="The name of the listing")
+    text_content = StringField(desc="The content of the listing's text description")
+    image_filepaths = ListField(
+        element_type=ImageFilepathField,
         desc="A list of the filepaths for each image of the listing",
-        required=True,
     )
 
 
 class TextBikeListing(BikeListingFiles): #solely rely on the text and NO images
     """Represents a real estate listing with specific fields extracted from its text."""
 
-    # address = pz.StringField(desc="The address of the property")
-    # price = pz.NumericField(desc="The listed price of the property")
+    # address = StringField(desc="The address of the property")
+    # price = NumericField(desc="The listed price of the property")
 
-    price = pz.NumericField(desc="The listed price of the property")
+    price = NumericField(desc="The listed price of the property")
 
-    # brand = pz.StringField(desc="The brand of the bike")
-    # is_new = pz.BooleanField(desc="True if bicycle is relatively new and fresh and False if otherwiswe") 
-    # size = pz.NumericalField (desc="The zie of the bike") #variables that can be determined by images and  text
+    # brand = StringField(desc="The brand of the bike")
+    # is_new = BooleanField(desc="True if bicycle is relatively new and fresh and False if otherwiswe") 
+    # size = NumericalField (desc="The zie of the bike") #variables that can be determined by images and  text
 
 
-    seller_name = pz.StringField(desc="The name of the seller")
-    seller_id = pz.NumericField(desc="The id of the seller")
-    seller_rating = pz.NumericField(desc="The rating of the seller")
-    location = pz.StringField(desc="The location of the bike seller")
-    description = pz.StringField(desc="The description of the bike")
-    description_shortened = pz.StringField(desc="The shortened description of the bike")
+    seller_name = StringField(desc="The name of the seller")
+    seller_id = NumericField(desc="The id of the seller")
+    seller_rating = NumericField(desc="The rating of the seller")
+    location = StringField(desc="The location of the bike seller")
+    description = StringField(desc="The description of the bike")
+    description_shortened = StringField(desc="The shortened description of the bike")
 
 
 class ImageBikeListing(BikeListingFiles): #uses both the Text and Image to computer answer
     """Represents a real estate listing with specific fields extracted from its text and images."""
 
-    # is_modern_and_attractive = pz.BooleanField(
+    # is_modern_and_attractive = BooleanField(
     #     desc="True if the home interior design is modern and attractive and False otherwise"
     # )
-    # has_natural_sunlight = pz.BooleanField(
+    # has_natural_sunlight = BooleanField(
     #     desc="True if the home interior has lots of natural sunlight and False otherwise"
     # )
 
 
-    is_bike = pz.BooleanField(desc="True if the images show a bike and False otherwise")
+    is_bike = BooleanField(desc="True if the images show a bike and False otherwise")
 
 
 
-    brand = pz.StringField(desc="The brand of the bike")
-    is_new = pz.BooleanField(desc="True if the bike is new, and False otherwise")
-    size = pz.NumericalField (desc="The size of the bike") #variables that can be determined by images and  text
+    brand = StringField(desc="The brand of the bike")
+    is_new = BooleanField(desc="True if the bike is new, and False otherwise")
+    size = NumericField(desc="The size of the bike") #variables that can be determined by images and  text
 
 
-    condition = pz.NumericalField (desc="The condition of the bike")
-    condition_rating = pz.NumericalField(desc="The condition of the bike quantifiied on a 1-10 scale")
-    images = pz.ListField(element_type=pz.StringField, desc="List of Images") #is this neccessary
+    condition = NumericField (desc="The condition of the bike")
+    condition_rating = NumericField(desc="The condition of the bike quantifiied on a 1-10 scale")
+    # images = ListField(element_type=StringField, desc="List of Images") #is this neccessary
 
 
 
-class BikeListingSource(pz.UserSource): #confirm whether or not its correct
+class BikeListingSource(UserSource): #confirm whether or not its correct
     def __init__(self, dataset_id, listings_dir):
         super().__init__(BikeListingFiles, dataset_id)
         self.listings_dir = listings_dir
         self.listings = sorted(os.listdir(self.listings_dir))
+
+    def copy(self):
+        return BikeListingSource(self.dataset_id, self.listings_dir)
 
     def __len__(self):
         return len(self.listings)
@@ -150,7 +164,7 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
         listing = self.listings[idx]
 
         # create data record
-        dr = pz.DataRecord(self.schema, source_id=listing)
+        dr = DataRecord(self.schema, source_id=listing)
         dr.listing = listing
         dr.image_filepaths = []
         listing_dir = os.path.join(self.listings_dir, listing)
@@ -173,7 +187,7 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
 
     #main File
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
     # parse arguments
     parser = argparse.ArgumentParser(description="Run a simple demo")
     parser.add_argument("--viz", default=False, action="store_true", help="Visualize output in Gradio")
@@ -186,8 +200,8 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
     parser.add_argument(
         "--executor",
         type=str,
-        help="The plan executor to use. One of sequential, pipelined, parallel",
-        default="parallel",
+        help="The plan executor to use. One of sequential, pipelined_single_thread, pipelined_parallel",
+        default="sequential",
     )
     parser.add_argument(
         "--policy",
@@ -215,27 +229,15 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
     visualize = args.viz
     verbose = args.verbose
     profile = args.profile
-    policy = pz.MaxQuality()
+    policy = MaxQuality()
     if args.policy == "mincost":
-        policy = pz.MinCost()
+        policy = MinCost()
     elif args.policy == "mintime":
-        policy = pz.MinTime()
+        policy = MinTime()
     elif args.policy == "maxquality":
-        policy = pz.MaxQuality()
+        policy = MaxQuality()
     else:
         print("Policy not supported for this demo")
-        exit(1)
-
-    execution_engine = None
-    executor = args.executor
-    if executor == "sequential":
-        execution_engine = pz.NoSentinelSequentialSingleThreadExecution
-    elif executor == "pipelined":
-        execution_engine = pz.NoSentinelPipelinedSingleThreadExecution
-    elif executor == "parallel":
-        execution_engine = pz.NoSentinelPipelinedParallelExecution
-    else:
-        print("Executor not supported for this demo")
         exit(1)
 
     if os.getenv("OPENAI_API_KEY") is None and os.getenv("TOGETHER_API_KEY") is None:
@@ -243,49 +245,41 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
 
     # create pz plan
     #REPLACE WITH BIKE LISTINGS AT LINES 244 ONWORD
-    data_filepath = f"testdata/{datasetid}"
     user_dataset_id = f"{datasetid}-user"
-    pz.DataDirectory().register_user_source(
-        src=BikeListingFiles(user_dataset_id, data_filepath),
+    DataDirectory().register_user_source(
+        src=BikeListingSource(user_dataset_id, "bike-listings"),
         dataset_id=user_dataset_id,
     )
-    plan = pz.Dataset(user_dataset_id, schema=BikeListingFiles)
+    plan = Dataset(user_dataset_id, schema=BikeListingFiles)
     plan = plan.convert(TextBikeListing, depends_on="text_content")
-    plan = plan.convert(ImageBikeListing, image_conversion=True, depends_on="image_filepaths")
+    plan = plan.convert(ImageBikeListing, depends_on="image_filepaths")
     # plan = plan.filter(
     #     "The interior is modern and attractive, and has lots of natural sunlight",
     #     depends_on=["is_modern_and_attractive", "has_natural_sunlight"],
     # ) -->do we need
-
+    plan = plan.filter(is_close, depends_on="location") # TODO: update to use is_close
+    plan = plan.filter(is_good_deal, depends_on="price") # TODO: update to use is_good_deal
     plan = plan.filter(
-        "The bike is predominantly black, blue or red (preferably black). The bike should be usable for an adult and should be under 200 dollars and have less than 5 years of usage. Closeby pickup location needed",
-        depends_on=["is_modern_and_attractive", "has_natural_sunlight"],
+        "The bike is predominantly black, blue or red (preferably black). "
+        "The bike should be usable for an adult and should be under 200 dollars and have less than 5 years of usage. "
+        "Closeby pickup location needed",
     )
-    plan = plan.filter(within_two_miles_of_mit, depends_on="location")
-    plan = plan.filter(in_price_range, depends_on="price")
 
-    # execute pz plan
-    records, execution_stats = pz.Execute(
-        plan,
-        policy,
+    config = QueryProcessorConfig(
         nocache=True,
-        optimization_strategy=pz.OptimizationStrategy.PARETO,
-        execution_engine=execution_engine,
         verbose=verbose,
+        policy=policy,
+        execution_strategy=args.executor,
+        available_models=[Model.MIXTRAL, Model.GPT_4o_MINI, Model.GPT_4o_MINI_V]
     )
-
-    # save statistics
-    if profile:
-        stats_path = f"profiling-data/{workload}-profiling.json"
-        execution_stats_dict = execution_stats.to_json()
-        with open(stats_path, "w") as f:
-            json.dump(execution_stats_dict, f)
+    data_record_collection = plan.run(config)
+    print(data_record_collection.to_df())
 
     # visualize output in Gradio
     if visualize:
         from palimpzest.utils.demo_helpers import print_table
 
-        plan_str = list(execution_stats.plan_strs.values())[-1]
+        plan_str = list(data_record_collection.execution_stats.plan_strs.values())[-1]
         fst_imgs, snd_imgs, thrd_imgs, locations, prices = [], [], [], [], [] # init list for ratings = []
         is_news = []
         sizes = []
@@ -297,7 +291,7 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
         seller_ratings = []
         descriptions = []
         shortened_descriptions = []
-        for record in records:
+        for record in data_record_collection:
             locations.append(record.location)
             prices.append(record.price) # also append record.seller_rating to ratings
             is_news.append(record.is_new)
@@ -383,7 +377,7 @@ class BikeListingSource(pz.UserSource): #confirm whether or not its correct
                         
                     # Add column for rating_blocks
 
-            plan_str = list(execution_stats.plan_strs.values())[0]
+            plan_str = list(data_record_collection.execution_stats.plan_strs.values())[0]
             gr.Textbox(value=plan_str, info="Query Plan")
 
         demo.launch()
