@@ -1,2 +1,5 @@
+# standard ignore
+.DS_Store
+
 # don't upload testdata
 testdata/*

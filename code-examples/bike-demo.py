@@ -260,9 +260,7 @@ if __name__ == "__main__":
     plan = plan.filter(is_close, depends_on="location") # TODO: update to use is_close
     plan = plan.filter(is_good_deal, depends_on="price") # TODO: update to use is_good_deal
     plan = plan.filter(
-        "The bike is predominantly black, blue or red (preferably black). "
-        "The bike should be usable for an adult and should be under 200 dollars and have less than 5 years of usage. "
-        "Closeby pickup location needed",
+        "The bike can be any color!",
     )
 
     config = QueryProcessorConfig(
